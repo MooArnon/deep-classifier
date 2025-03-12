@@ -185,7 +185,7 @@ class BaseFE:
         if df[self.control_column].dtype == pl.Utf8:
             df = df.with_columns(
                 pl.col(self.control_column)
-                .str.strptime(pl.Datetime, format="%Y-%m-%dT%H:%M:%S", strict=False)
+                .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=True)
             )
         df = df.sort(by=self.control_column)
 
@@ -216,7 +216,9 @@ class BaseFE:
             drop_cols = [col for col in self.unused_feature if col in df.columns]
             if drop_cols:
                 df = df.drop(drop_cols)
-
+        df = self.add_binary_label(df)
+        self.final_column.append('label')
+        
         # Keep or drop columns based on the flags
         if not keep_control and self.control_column in df.columns:
             if keep_target:
@@ -240,8 +242,11 @@ class BaseFE:
         for col_to_remove in ("price", "signal"):
             if col_to_remove in self.features:
                 self.features.remove(col_to_remove)
-
+        if 'asset' in df.columns:
+            df = df.drop('asset')
+            self.final_column.remove('asset')
         return df.select(list(set(self.final_column)))
+    
     # ------------------------------------------------
     # Example placeholders for feature-engineering methods
     # (Implement your actual logic here.)
