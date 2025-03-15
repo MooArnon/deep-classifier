@@ -119,7 +119,7 @@ class BaseFE:
             
             # Concatenate the results from all assets.
             df = pl.concat(asset_dfs)
-            df.select([self.control_column, 'asset', self.target_column, 'shifted', 'diff', 'label']).to_pandas().to_csv('result.csv')
+            # df.select([self.control_column, 'asset', self.target_column, 'shifted', 'diff', 'label']).to_pandas().to_csv('result.csv')
             return df
         else:
             # No asset column: process the whole DataFrame.
@@ -181,7 +181,7 @@ class BaseFE:
             keep_control: bool = False,
     ) -> pl.DataFrame:
         df = self.read_df(df)
-
+        print(df)
         if df[self.control_column].dtype == pl.Utf8:
             df = df.with_columns(
                 pl.col(self.control_column)
@@ -244,6 +244,7 @@ class BaseFE:
                 self.features.remove(col_to_remove)
         if 'asset' in df.columns:
             df = df.drop('asset')
+        if 'asset' in self.final_column:
             self.final_column.remove('asset')
         return df.select(list(set(self.final_column)))
     

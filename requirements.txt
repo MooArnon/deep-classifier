@@ -4,3 +4,4 @@ tensorflow~=2.18.0
 pytest~=8.3.5
 pyarrow~=19.0.1
 pandas~=2.2.3
+git+https://github.com/MooArnon/space-time-pipeline.git@v0.4.4
