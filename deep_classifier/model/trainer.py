@@ -146,6 +146,7 @@ class Trainer:
                 EarlyStopping(
                     monitor="val_loss", 
                     patience=5, 
+                    min_delta=0.001,
                     restore_best_weights=True,
                 )
             ]

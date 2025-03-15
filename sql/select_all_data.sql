@@ -3,5 +3,6 @@ select
     , open
     , asset
 from quarterly_raw_data
-limit 10000
+order by open_time asc
+limit <LIMIT>
 ;

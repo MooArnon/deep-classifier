@@ -59,7 +59,7 @@ def setup_args() -> argparse.ArgumentParser:
 ##############################################################################
 
 if __name__ == "__main__":
-    # python fine_tune_pipeline.py open_time open --epochs 10
+    # python fine_tune_pipeline.py open_time open --epochs 150 --max_trials 50 --validation-split 0.2
     args = setup_args()
     main(
         control_column=args.control_column,

@@ -38,7 +38,7 @@ def main(
         epochs=epochs,
         max_trials=max_trials,
         logger=logger,
-        push_to_s3=True
+        push_to_s3=True,
     )
 
 ##############################################################################

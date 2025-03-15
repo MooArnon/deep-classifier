@@ -64,73 +64,67 @@ class BaseFE:
     @process_dataframe_decorator
     def add_binary_label(self, df: pl.DataFrame, threshold: float = 0.0) -> pl.DataFrame:
         """
-        Add a label column to the DataFrame based on the change in the target column,
-        processing each asset separately if an "asset" column is present.
-        
-        The label is determined as follows:
-        - "LONG" if (current - previous) >= threshold,
-        - "SHORT" otherwise.
-        
-        The first row of each asset group (which has no previous value) is dropped.
-        
+        Add a binary label column (0 or 1) to the DataFrame based on price changes.
+
+        - "LONG" → `1` (if next price >= threshold)
+        - "SHORT" → `0` (otherwise)
+
+        The first row for each asset is dropped.
+
         Parameters
         ----------
         df : pl.DataFrame
             The input DataFrame.
         threshold : float, optional
-            The threshold for determining a "LONG" signal. Default is 0.0.
-        
+            Threshold to classify "LONG" (default is `0.0`).
+
         Returns
         -------
         pl.DataFrame
-            The DataFrame with the new "label" column.
+            DataFrame with a new `label` column (`0` or `1`).
         """
         if "asset" in df.columns:
             print('asset is at df')
-            
-            # Get unique asset values.
+
+            # Process each asset separately
             asset_values = df.select(pl.col("asset")).unique().to_series().to_list()
             asset_dfs = []
+
             for asset in asset_values:
-                
-                # Filter for the current asset and sort by control column.
                 asset_df = df.filter(pl.col("asset") == asset).sort(by=self.control_column)
-                
+
                 asset_df = asset_df.with_columns(
                     (pl.col(self.target_column).shift(-1)).alias("shifted")
                 )
-                
-                # Compute difference for this asset.
+
                 asset_df = asset_df.with_columns(
                     (pl.col('shifted') - pl.col(self.target_column)).alias("diff")
                 )
-                
-                # Drop the first row (no previous value).
+
                 asset_df = asset_df.drop_nulls(subset=["diff"])
-                
-                # Compute the binary label based on the difference.
+
+                # Encode labels as 0 (SHORT) and 1 (LONG)
                 asset_df = asset_df.with_columns(
                     pl.when(pl.col("diff") >= threshold)
-                    .then(pl.lit("LONG"))
-                    .otherwise(pl.lit("SHORT"))
+                    .then(pl.lit(1))
+                    .otherwise(pl.lit(0))
                     .alias("label")
                 )
+
                 asset_dfs.append(asset_df)
-            
-            # Concatenate the results from all assets.
+
             df = pl.concat(asset_dfs)
-            # df.select([self.control_column, 'asset', self.target_column, 'shifted', 'diff', 'label']).to_pandas().to_csv('result.csv')
             return df
         else:
-            # No asset column: process the whole DataFrame.
             df = df.with_columns(
                 (pl.col(self.target_column) - pl.col(self.target_column).shift(1)).alias("diff")
             )
             df = df.drop_nulls(subset=["diff"])
+
             df = df.with_columns(
                 pl.when(pl.col("diff") >= threshold)
-                .then(pl.lit("LONG"))
-                .otherwise(pl.lit("SHORT"))
+                .then(pl.lit(1))
+                .otherwise(pl.lit(0))
                 .alias("label")
             )
             return df

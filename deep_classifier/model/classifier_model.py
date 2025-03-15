@@ -1,6 +1,7 @@
 import keras_tuner as kt
 import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
+from .custom_metric import BalancedLabelMetric
 
 def build_dynamic_dnn_hp(hp, input_shape):
     inputs = layers.Input(shape=input_shape)
@@ -24,7 +25,7 @@ def build_dynamic_dnn_hp(hp, input_shape):
     model.compile(
         optimizer=optimizers.Adam(learning_rate=learning_rate),
         loss='binary_crossentropy',
-        metrics=['accuracy']
+        metrics=[BalancedLabelMetric()]
     )
 
     return model

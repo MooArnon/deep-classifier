@@ -7,6 +7,7 @@ from datetime import datetime
 import pickle
 import polars as pl
 
+import numpy as np
 import keras_tuner as kt
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -15,6 +16,7 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
 from ..fe.__base import BaseFE
+from .custom_metric import BalancedLabelMetric
 
 ##############################################################################
 
@@ -47,19 +49,19 @@ class ModelWrapper:
         elif model_path:
             self.model = tf.keras.models.load_model(model_path)
         else:
-            raise ValueError(
+            Warning(
                 "Either a Keras model or a model path must be provided."
             )
         
         if fe_pipeline:
             self.fe_pipeline = fe_pipeline
         else:
-            raise KeyError("Please assign fe_pipeline")
+            Warning("Please assign fe_pipeline")
         
         if base_model_path:
             self.base_model_path = base_model_path
         else:
-            self.base_model_path = os.path.join("model_base.h5")
+            Warning("Please assign fe_pipeline")
     
     ##########################################################################
     
@@ -69,7 +71,7 @@ class ModelWrapper:
         and adding dynamically-tuned top layers.
         """
         # Load base model and freeze its layers
-        base_model = tf.keras.models.load_model(self.base_model_path)
+        base_model = self.model
         base_model.trainable = False
 
         # Extract output from the second-to-last layer as a representation
@@ -95,7 +97,7 @@ class ModelWrapper:
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
             loss='binary_crossentropy',
-            metrics=['accuracy']
+            metrics=[BalancedLabelMetric()],
         )
 
         return model
@@ -141,13 +143,19 @@ class ModelWrapper:
 
         # 🔹 Apply Feature Engineering
         df_transformed = self.fe_pipeline.transform_df(df).drop_nulls()
+        df_transformed.to_pandas().to_csv("transformed.csv")
 
         if df_transformed.height == 0:
             raise ValueError("No valid records after feature engineering.")
 
         # Prepare data
         X = df_transformed.drop(["label"]).to_numpy()
-        y = (df_transformed["label"] == "LONG").to_numpy().astype(int)
+        y = df_transformed.select('label').to_numpy()
+        
+        # Count occurrences
+        num_long = np.sum(y == 1)  # Count 1s (LONG)
+        num_short = np.sum(y == 0)  # Count 0s (SHORT)
+        print(f"LONG (1): {num_long}, SHORT (0): {num_short}")
 
         # Train-validation split
         X_train, X_val, y_train, y_val = train_test_split(
@@ -290,7 +298,8 @@ class ModelWrapper:
     
     ##########################################################################
     
-    def load(cls, filepath: str = 'model_base'):
+    @staticmethod
+    def load(path: os.PathLike ,filepath: str = 'model_base'):
         """
         Load a ModelWrapper object from a pickle file.
 
@@ -304,10 +313,13 @@ class ModelWrapper:
         ModelWrapper
             Loaded ModelWrapper instance.
         """
-        with open(f"{filepath}_wrapper.pkl", 'rb') as file:
+        wrapper_path = os.path.join(path, f"{filepath}_wrapper.pkl")
+        model_path = os.path.join(path, f"{filepath}.h5")
+        
+        with open(wrapper_path, 'rb') as file:
             wrapper = pickle.load(file)
 
-        wrapper.model = tf.keras.models.load_model(f"{filepath}.h5")
+        wrapper.model = tf.keras.models.load_model(model_path)
         return wrapper
     
     ##########################################################################

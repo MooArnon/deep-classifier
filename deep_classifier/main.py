@@ -2,13 +2,16 @@
 # Import #
 ##############################################################################
 
+import pickle
 import os 
 import logging 
 
 import pandas as pd
+import numpy as np
 import polars as pl
 from space_time_pipeline.data_lake_house import Athena
 from space_time_pipeline.data_lake import S3DataLake
+import tensorflow as tf
 
 from deep_classifier.fe.classifier_fe import ClassifierFE
 from deep_classifier.model.trainer import Trainer
@@ -34,35 +37,70 @@ def run_full_training_pipeline(
         model_base_name: str = "model_base.h5",
         aws_s3_bucket: str = "space-time-model",
         aws_s3_prefix: str = "classifier",
-): 
+        percent_change_window: list[int] = [1, 2, 3, 4, 5, 9, 22, 30],
+        percent_price_ema_window: list[int] = [7, 22, 99]
+        
+):  
+    # Set GPU memory growth to avoid memory issues
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            logger.info(
+                f"{len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPUs"
+            )
+        except RuntimeError as e:
+            logger.info(e)
+
+    # Ensure TensorFlow runs on GPU
+    with tf.device('/GPU:0'):
+        logger.info("Running on GPU!")
+        
     model_base_wrapper_path = os.path.join(file_path, model_base_wrapper_name)
     model_base_path = os.path.join(file_path, model_base_name)
     
     aws_s3_prefix = f"{aws_s3_prefix}/base"
     
     logger.info(f"Selecting data from {os.path.join('sql', 'select_all_data.sql')}")
-    # __get_data_athena(
-    #     query_file_path=os.path.join('sql', 'select_all_data.sql'),
-    #     replace_condition_dict={'<LIMIT>': 1000000},
-    #     file_name='data-all.csv'
-    # )
+    __get_data_athena(
+        query_file_path=os.path.join('sql', 'select_all_data.sql'),
+        replace_condition_dict={'<LIMIT>': 10000000},
+        file_name='data-all.csv'
+    )
     
     df = pl.read_csv('data-all.csv')
-    print(f"Shape: {df.shape}")
+    logger.info(f"Train with shape: {df.shape}")
     
     # Initialize feature engineering
     fe = ClassifierFE(
         control_column=control_column,
         target_column=target_column,
-        fe_name_list=fe_methods
+        fe_name_list=fe_methods,
+        percent_change_window=percent_change_window,
+        percent_price_ema_window=percent_price_ema_window,
     )
 
     # Transform features
     df_features = fe.transform_df(df)
+    logger.info(f"Features: {df_features.columns}")
 
     # Prepare data for model
     X = df_features.drop(["label"]).to_numpy()
-    y = (df_features["label"] == "LONG").to_numpy().astype(int)
+    y = df_features.select('label').to_numpy()
+    
+    # Count occurrences
+    num_long = np.sum(y == 1)  # Count 1s (LONG)
+    num_short = np.sum(y == 0)  # Count 0s (SHORT)
+    logger.info(f"LONG (1): {num_long}, SHORT (0): {num_short}")
+
+    logger.info(f"TensorFlow version: {tf.__version__}")
+    devices = tf.config.list_physical_devices()
+    logger.info(f"All physical devices: {devices}")
+
+    gpu_devices = tf.config.list_physical_devices("GPU")
+    logger.info(f"GPU devices: {gpu_devices}")
 
     # Train the model with random search
     trainer = Trainer(model_type='dnn', input_shape=(X.shape[1],))
@@ -123,7 +161,9 @@ def run_fine_tune_pipeline(
         batch_size: int = 32,
         epochs: int = 50,
         max_trials: int = 3,
-        asset: str = 'btc'
+        asset: str = 'btc',
+        aws_s3_bucket: str = "space-time-model",
+        aws_s3_prefix: str = "classifier",
 ):
     """
     Fine-tune a pre-trained model using BTC data.
@@ -158,6 +198,27 @@ def run_fine_tune_pipeline(
     best_model : tf.keras.Model
         The fine-tuned model.
     """
+    local_path="base_model"
+    
+    # Local path
+    wrapper_path = os.path.join(local_path, "model_base_wrapper.pkl")
+    base_model_path = os.path.join(local_path, base_model_path)
+    
+    # S3 prefix
+    aws_s3_prefix = f"{aws_s3_prefix}/base"
+    
+    s3 = S3DataLake(logger=logger)
+    s3.download_file(
+        bucket_name=aws_s3_bucket,
+        target_prefix=aws_s3_prefix,
+        logger=logger,
+        local_path=local_path,
+    )
+    
+    tmp_wrapper =  ModelWrapper()
+    wrapper: ModelWrapper = tmp_wrapper.load(
+        path=local_path
+    )
 
     # 🔹 Step 1: Fetch Data
     __get_data_athena(
@@ -167,17 +228,9 @@ def run_fine_tune_pipeline(
     )
     
     df = pl.read_csv(f"data-{asset}.csv")
-    print(f"Loaded Data Shape: {df.shape}")
-
-    # 🔹 Step 2: Initialize Feature Engineering Pipeline
-    fe = ClassifierFE(
-        control_column=control_column,
-        target_column=target_column,
-        fe_name_list=fe_methods
-    )
-
-    # 🔹 Step 3: Load Model & Fine-Tune
-    wrapper = ModelWrapper(model_path=base_model_path, fe_pipeline=fe)
+    if df.columns[0] == "":
+        df = df.drop(df.columns[0])
+    logger.info(f"Loaded Data Shape: {df.shape}")
 
     # 🔹 Step 4: Fine-Tune Model
     best_params, val_loss, best_model = wrapper.fine_tune(
