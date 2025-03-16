@@ -3,8 +3,10 @@
 ##############################################################################
 
 import pickle
+from datetime import datetime, timezone
 import os 
 import logging 
+from typing import Union
 
 import pandas as pd
 import numpy as np
@@ -65,6 +67,7 @@ def run_full_training_pipeline(
     
     logger.info(f"Selecting data from {os.path.join('sql', 'select_all_data.sql')}")
     __get_data_athena(
+        logger=logger,
         query_file_path=os.path.join('sql', 'select_all_data.sql'),
         replace_condition_dict={'<LIMIT>': 10000000},
         file_name='data-all.csv'
@@ -154,9 +157,6 @@ def run_full_training_pipeline(
 def run_fine_tune_pipeline(
         logger: logging.Logger,
         base_model_path: str,
-        control_column: str = "date",
-        target_column: str = "close",
-        fe_methods: list = ["percent_change_df", "rsi_df", "macd_df", "percent_price_ema_df"],
         validation_split: float = 0.2,
         batch_size: int = 32,
         epochs: int = 50,
@@ -164,6 +164,9 @@ def run_fine_tune_pipeline(
         asset: str = 'btc',
         aws_s3_bucket: str = "space-time-model",
         aws_s3_prefix: str = "classifier",
+        push_to_s3: bool = False,
+        model_fine_tuned_wrapper_name: str = "fine_tuned_model_wrapper.pkl",
+        model_fine_tuned_name: str = "fine_tuned_model.h5",
 ):
     """
     Fine-tune a pre-trained model using BTC data.
@@ -201,16 +204,15 @@ def run_fine_tune_pipeline(
     local_path="base_model"
     
     # Local path
-    wrapper_path = os.path.join(local_path, "model_base_wrapper.pkl")
     base_model_path = os.path.join(local_path, base_model_path)
     
     # S3 prefix
-    aws_s3_prefix = f"{aws_s3_prefix}/base"
+    aws_s3_prefix_base = f"{aws_s3_prefix}/base"
     
     s3 = S3DataLake(logger=logger)
     s3.download_file(
         bucket_name=aws_s3_bucket,
-        target_prefix=aws_s3_prefix,
+        target_prefix=aws_s3_prefix_base,
         logger=logger,
         local_path=local_path,
     )
@@ -219,9 +221,10 @@ def run_fine_tune_pipeline(
     wrapper: ModelWrapper = tmp_wrapper.load(
         path=local_path
     )
-
+    
     # 🔹 Step 1: Fetch Data
     __get_data_athena(
+        logger=logger,
         query_file_path=os.path.join('sql', 'select_btc_data.sql'),
         replace_condition_dict={'<LIMIT>': 1000000},
         file_name=f'data-{asset}.csv'
@@ -231,7 +234,7 @@ def run_fine_tune_pipeline(
     if df.columns[0] == "":
         df = df.drop(df.columns[0])
     logger.info(f"Loaded Data Shape: {df.shape}")
-
+    
     # 🔹 Step 4: Fine-Tune Model
     best_params, val_loss, best_model = wrapper.fine_tune(
         df,
@@ -240,42 +243,110 @@ def run_fine_tune_pipeline(
         batch_size=batch_size,
         epochs=epochs
     )
-
+    
     # 🔹 Step 5: Save Fine-Tuned Model
     wrapper.save(f"{asset}_fine_tuned_model")
 
     print(best_model.summary())
+    
+    # Push to S3
+    if push_to_s3:
+        aws_s3_prefix=f"{aws_s3_prefix}/tuned/{asset}"
+        model_fine_tuned_wrapper_name = f"{asset}_{model_fine_tuned_wrapper_name}"
+        model_fine_tuned_name = f"{asset}_{model_fine_tuned_name}"
+        
+        model_fine_tuned_wrapper_path = os.path.join(model_fine_tuned_wrapper_name)
+        model_fine_tuned_path = os.path.join(model_fine_tuned_name)
+        
+        print(f"model_fine_tuned_wrapper_path: {model_fine_tuned_wrapper_path}")
+
+        logger.info("Push model and wrapper to S3")
+        
+        # Wrapper 
+        clear_and_push_to_s3(
+            model_fine_tuned_wrapper_path,
+            aws_s3_bucket,
+            f"{aws_s3_prefix}/",
+        )
+        logger.info(
+            f"Pushed {model_fine_tuned_wrapper_path} to " \
+                f"bucket: {aws_s3_bucket} prefix: {aws_s3_prefix}"
+        )
+        
+        # Keras model
+        upload_to_s3(
+            model_fine_tuned_path,
+            aws_s3_bucket,
+            f"{aws_s3_prefix}/{model_fine_tuned_name}",
+        )
+        logger.info(
+            f"Pushed {model_fine_tuned_path} to " \
+                f"bucket: {aws_s3_bucket} prefix: {aws_s3_prefix}"
+        )
+        
+        os.remove(model_fine_tuned_wrapper_path)
+        os.remove(model_fine_tuned_path)
 
     return best_params, val_loss, best_model
+
 ##############################################################################
 
-def predict(asset: str) -> int:
+def predict(
+        asset: str, 
+        logger: logging.Logger, 
+        model_path: os.PathLike = "/tmp",
+        aws_s3_bucket: str = "space-time-model",
+        aws_s3_prefix: str = "classifier",
+        model_name: str = "fine_tuned_model",
+) -> Union[int, str]:
+    aws_s3_prefix_tuned=f"{aws_s3_prefix}/tuned/{asset}"
+    model_name = f"{asset}_{model_name}"
     
-    wrapper = ModelWrapper.load(f"{asset}_fine_tuned_model")
+    s3 = S3DataLake(logger=logger)
+    s3.download_file(
+        bucket_name=aws_s3_bucket,
+        target_prefix=aws_s3_prefix_tuned,
+        logger=logger,
+        local_path=model_path,
+    )
+
+    wrapper: ModelWrapper = ModelWrapper.load_tuned(
+        path = model_path,
+        filepath=model_name
+    )
     
-    __get_data_athena(
+    logger.info(f"Predict with features: {wrapper.fe_pipeline.features}")
+    logger.info("Model architecture:")
+    logger.info(f"{wrapper.model.summary()}")
+    logger.info(f"Model id is: {wrapper.model_id}")
+
+    data = __get_data_athena(
+        logger=logger,
         query_file_path=os.path.join('sql', f'select_{asset}_data.sql'),
         replace_condition_dict={'<LIMIT>': 200},
-        file_name=f'data-{asset}.csv'
+        return_dict=True
     )
-    df = pl.read_csv(f'data-{asset}.csv')
-    return wrapper.predict_one(df)
+    return wrapper.predict_one(data), wrapper.model_id
 
 ##############################################################################
 
 def __get_data_athena(
+        logger: logging.Logger,
         query_file_path: str, 
         replace_condition_dict: dict,
-        file_name: str,
+        file_name: str = None,
+        return_dict: bool = False,
 ) -> None:
-    logger = logging.getLogger(__name__)
     lake_house = Athena(logger)
     data = lake_house.select(
         replace_condition_dict=replace_condition_dict,
         database="warehouse",
         query_file_path=query_file_path,
     )
-    df = pd.DataFrame(data)
-    df.to_csv(file_name)
-    
+    if return_dict is True:
+        return data
+    else:
+        df = pd.DataFrame(data)
+        df.to_csv(file_name)
+        
 ##############################################################################

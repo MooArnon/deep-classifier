@@ -21,8 +21,6 @@ logger = get_logger(logger_name=os.path.basename(__file__))
 ##############################################################################
 
 def main(
-        control_column: str,
-        target_column: str,
         validation_split: float, 
         batch_size: int,
         epochs: int,
@@ -31,22 +29,18 @@ def main(
 
     run_fine_tune_pipeline(
         base_model_path='model_base.h5',
-        control_column=control_column,
-        target_column=target_column,
-        fe_methods=["percent_change_df", "rsi_df", "macd_df", "percent_price_ema_df"],
         validation_split=validation_split,
         batch_size=batch_size,
         epochs=epochs,
         max_trials=max_trials,
-        logger=logger
+        logger=logger,
+        push_to_s3=True,
     )
 
 ##############################################################################
 
 def setup_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("control_column", help="Stamp column")
-    parser.add_argument("target_column", help="Taget price column")
     parser.add_argument("--validation-split", help="Number of test data splited", default=0.1, type = float)
     parser.add_argument("--batch-size", help="Batch size per epoch", default=32, type=int)
     parser.add_argument("--epochs", help="Number of epoch per trials", default=100, type=int)
@@ -62,8 +56,6 @@ if __name__ == "__main__":
     # python fine_tune_pipeline.py open_time open --epochs 150 --max_trials 50 --validation-split 0.2
     args = setup_args()
     main(
-        control_column=args.control_column,
-        target_column=args.target_column,
         validation_split=args.validation_split,
         batch_size=args.batch_size,
         epochs=args.epochs,

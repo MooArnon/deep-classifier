@@ -2,6 +2,8 @@
 # Import #
 ##############################################################################
 
+import os
+
 import polars as pl
 from typing import Union, List, Optional
 
@@ -170,12 +172,17 @@ class BaseFE:
     
     def transform_df(
             self,
-            df: Union[str, pl.DataFrame],
+            df: Union[os.PathLike, pl.DataFrame],
             keep_target: bool = True,
             keep_control: bool = False,
     ) -> pl.DataFrame:
-        df = self.read_df(df)
-        print(df)
+        if isinstance(df, os.PathLike):
+            df = self.read_df(df)
+        elif isinstance(df, pl.DataFrame):
+            df=df
+        else:
+            raise ValueError(f"df type is {type(df)}, it must be only os.PathLike and pl.DataFrame")
+        
         if df[self.control_column].dtype == pl.Utf8:
             df = df.with_columns(
                 pl.col(self.control_column)

@@ -1,49 +1,33 @@
-##########
-# Import #
-##############################################################################
-
 import logging
-from datetime import datetime, timezone
-import pytz
+import time
 
-###########
-# Classes #
-##############################################################################
-
-# Define a custom formatter that uses UTC time
 class UTCFormatter(logging.Formatter):
+    """
+    Custom formatter to force UTC time in logs.
+    """
+    converter = time.gmtime  # Convert all timestamps to UTC
+
     def formatTime(self, record, datefmt=None):
-        # Use timezone-aware datetime
-        utc_time = datetime.fromtimestamp(record.created, tz=timezone.utc)
-        if datefmt:
-            return utc_time.strftime(datefmt)
-        else:
-            return utc_time.strftime('%Y-%m-%d %H:%M:%S')
+        return super().formatTime(record, datefmt)
 
-############
-# Function #
-##############################################################################
-
-def get_logger(logger_name: str):
+def get_logger(logger_name: str) -> logging.Logger:
     """
-    Creates and returns a configured logger object that prints logs to the terminal.
-
-    Returns:
-        logging.Logger: The configured logger object.
+    Returns a configured logger with UTC timestamps, ensuring
+    we don't add duplicate handlers.
     """
-    # Set up the logger
     logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)  # Set the desired logging level
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # Avoid passing logs to higher-level loggers
 
-    # Create a stream handler that logs debug and higher level messages to the terminal
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-
-    # Create a formatter and set it for the handler
-    formatter = UTCFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-
-    # Add the handler to the logger
-    logger.addHandler(handler)
+    # Only add a handler if there aren't any
+    if not logger.handlers:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        formatter = UTCFormatter(
+            fmt="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     return logger

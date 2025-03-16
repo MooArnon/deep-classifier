@@ -171,5 +171,11 @@ cython_debug/
 .pypirc
 
 local/
+tmp/
 
 base_model/
+
+fine_tune*/
+
+data-btc.csv
+transformed.csv

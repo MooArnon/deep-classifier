@@ -124,7 +124,7 @@ class Trainer:
         model_id = datetime.today().strftime('%Y%m%d__%H%M%S')
         tuner = kt.RandomSearch(
             hypermodel=lambda hp: self.build_model_func(hp, self.input_shape),
-            objective='val_loss',
+            objective=kt.Objective("val_balanced_label_metric", direction="max"),
             max_trials=max_trials,
             executions_per_trial=1,
             directory=f'random_search_{model_id}',
@@ -146,7 +146,7 @@ class Trainer:
                 EarlyStopping(
                     monitor="val_loss", 
                     patience=5, 
-                    min_delta=0.001,
+                    min_delta=0.0001,
                     restore_best_weights=True,
                 )
             ]

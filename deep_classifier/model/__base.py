@@ -3,7 +3,8 @@
 ##############################################################################
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+import pandas as pd
 import pickle
 import polars as pl
 
@@ -62,6 +63,8 @@ class ModelWrapper:
             self.base_model_path = base_model_path
         else:
             Warning("Please assign fe_pipeline")
+        
+        self.model_id = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     
     ##########################################################################
     
@@ -167,7 +170,7 @@ class ModelWrapper:
         model_id = f"fine_tune_{current_timestamp}"
         tuner = kt.RandomSearch(
             hypermodel=self.build_fine_tune_model,
-            objective="val_loss",
+            objective=kt.Objective("val_balanced_label_metric", direction="max"),
             max_trials=max_trials,
             executions_per_trial=1,
             directory=model_id,
@@ -180,7 +183,14 @@ class ModelWrapper:
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(X_val, y_val),
-            callbacks=[EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)],
+            callbacks=[
+                EarlyStopping(
+                    monitor="val_loss", 
+                    patience=10, 
+                    min_delta=0.0001,
+                    restore_best_weights=True,
+                )
+            ],
             verbose=1
         )
 
@@ -240,7 +250,7 @@ class ModelWrapper:
     
     ##########################################################################
     
-    def predict_one(self, df: pl.DataFrame) -> str:
+    def predict_one(self, data: dict) -> str:
         """
         Apply feature engineering and predict binary labels.
 
@@ -256,6 +266,9 @@ class ModelWrapper:
         df : pl.DataFrame
             DataFrame with predictions.
         """
+        pd_df = pd.DataFrame(data)
+        df = pl.from_pandas(pd_df)
+        
         # Apply feature engineering
         df_transformed = self.fe_pipeline.transform_df(df)
         print(df_transformed.columns)
@@ -300,6 +313,32 @@ class ModelWrapper:
     
     @staticmethod
     def load(path: os.PathLike ,filepath: str = 'model_base'):
+        """
+        Load a ModelWrapper object from a pickle file.
+
+        Parameters
+        ----------
+        filepath : str
+            Base filename without extension.
+
+        Returns
+        -------
+        ModelWrapper
+            Loaded ModelWrapper instance.
+        """
+        wrapper_path = os.path.join(path, f"{filepath}_wrapper.pkl")
+        model_path = os.path.join(path, f"{filepath}.h5")
+        
+        with open(wrapper_path, 'rb') as file:
+            wrapper = pickle.load(file)
+
+        wrapper.model = tf.keras.models.load_model(model_path)
+        return wrapper
+    
+    ##########################################################################
+    
+    @staticmethod
+    def load_tuned(path: os.PathLike ,filepath: str):
         """
         Load a ModelWrapper object from a pickle file.
 

@@ -29,18 +29,15 @@ class BalancedLabelMetric(tf.keras.metrics.Metric):
         self.count = self.add_weight(name="count", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        """
-        y_true: int labels, shape=(batch_size,)
-        y_pred: probabilities or logits with shape=(batch_size, 2),
-                e.g. Dense(2, activation='softmax') for binary classification.
-        """
-        # Convert predicted probabilities to class labels
-        y_pred_labels = tf.argmax(y_pred, axis=1)  # shape=(batch_size,)
+        if y_pred.shape[-1] == 1:  
+            y_pred_labels = tf.cast(y_pred >= 0.5, tf.int32)
+        else:
+            y_pred_labels = tf.argmax(y_pred, axis=1)  
+
         y_true = tf.cast(y_true, tf.int32)
 
-        # We'll compute precision, recall, and F1 for each class in [0,1]
         f1_scores = []
-        num_classes = 2  # explicitly 2 for binary
+        num_classes = 2  
 
         for class_idx in range(num_classes):
             true_positives = tf.reduce_sum(
@@ -59,17 +56,14 @@ class BalancedLabelMetric(tf.keras.metrics.Metric):
             f1_score = 2 * (precision * recall) / (
                 precision + recall + tf.keras.backend.epsilon()
             )
+
             f1_scores.append(f1_score)
 
-        # f1_short = class 0
         f1_short = f1_scores[0]
-        # f1_long  = class 1
         f1_long  = f1_scores[1]
 
-        # Weighted sum of the F1 scores: "Precision-Recall Balance" (PRB)
+        # Compute PRB and CFPI
         prb = self.alpha * f1_long + (1.0 - self.alpha) * f1_short
-
-        # Composite Financial Performance Index (CFPI)
         cfpi = self.beta1 * prb
 
         # Accumulate
