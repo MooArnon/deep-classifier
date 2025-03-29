@@ -59,7 +59,7 @@ def setup_args() -> argparse.ArgumentParser:
 ##############################################################################
 
 if __name__ == "__main__":
-    # python full_training_pipeline.py open_time open --epochs 10 
+    # python full_training_pipeline.py open_time open --epochs 100  --max_trials 30
     args = setup_args()
     main(
         control_column=args.control_column,

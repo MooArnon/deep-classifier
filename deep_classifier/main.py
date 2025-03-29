@@ -14,6 +14,7 @@ import polars as pl
 from space_time_pipeline.data_lake_house import Athena
 from space_time_pipeline.data_lake import S3DataLake
 import tensorflow as tf
+from space_time_pipeline.nosql.dynamo_db import DynamoDB
 
 from deep_classifier.fe.classifier_fe import ClassifierFE
 from deep_classifier.model.trainer import Trainer
@@ -65,15 +66,25 @@ def run_full_training_pipeline(
     
     aws_s3_prefix = f"{aws_s3_prefix}/base"
     
-    logger.info(f"Selecting data from {os.path.join('sql', 'select_all_data.sql')}")
-    __get_data_athena(
-        logger=logger,
-        query_file_path=os.path.join('sql', 'select_all_data.sql'),
-        replace_condition_dict={'<LIMIT>': 10000000},
-        file_name='data-all.csv'
-    )
+    # logger.info(f"Selecting data from {os.path.join('sql', 'select_all_data.sql')}")
+    # __get_data_athena(
+    #     logger=logger,
+    #     query_file_path=os.path.join('sql', 'select_all_data.sql'),
+    #     replace_condition_dict={'<LIMIT>': 10000000},
+    #     file_name='data-all.csv'
+    # )
     
-    df = pl.read_csv('data-all.csv')
+    df = pl.read_csv(
+        os.path.join(
+            'local',
+            'all-data.csv'
+        ),
+        infer_schema_length=10000,
+        schema_overrides={
+            "volume": pl.Float64,
+            "taker_buy_base_asset_volume": pl.Float64,
+        },
+    )
     logger.info(f"Train with shape: {df.shape}")
     
     # Initialize feature engineering
@@ -223,14 +234,19 @@ def run_fine_tune_pipeline(
     )
     
     # 🔹 Step 1: Fetch Data
-    __get_data_athena(
-        logger=logger,
-        query_file_path=os.path.join('sql', 'select_btc_data.sql'),
-        replace_condition_dict={'<LIMIT>': 1000000},
-        file_name=f'data-{asset}.csv'
-    )
+    # __get_data_athena(
+    #     logger=logger,
+    #     query_file_path=os.path.join('sql', 'select_btc_data.sql'),
+    #     replace_condition_dict={'<LIMIT>': 1000000},
+    #     file_name=f'data-{asset}.csv'
+    # )
     
-    df = pl.read_csv(f"data-{asset}.csv")
+    df = pl.read_csv(
+        os.path.join(
+            "local",
+            "btc-data.csv",
+        )
+    )
     if df.columns[0] == "":
         df = df.drop(df.columns[0])
     logger.info(f"Loaded Data Shape: {df.shape}")
@@ -320,33 +336,11 @@ def predict(
     logger.info(f"{wrapper.model.summary()}")
     logger.info(f"Model id is: {wrapper.model_id}")
 
-    data = __get_data_athena(
-        logger=logger,
-        query_file_path=os.path.join('sql', f'select_{asset}_data.sql'),
-        replace_condition_dict={'<LIMIT>': 200},
-        return_dict=True
-    )
+    
+    dynamo = DynamoDB(logger)
+    data = dynamo.print_all_records('price_stream')
+    
+
     return wrapper.predict_one(data), wrapper.model_id
 
-##############################################################################
-
-def __get_data_athena(
-        logger: logging.Logger,
-        query_file_path: str, 
-        replace_condition_dict: dict,
-        file_name: str = None,
-        return_dict: bool = False,
-) -> None:
-    lake_house = Athena(logger)
-    data = lake_house.select(
-        replace_condition_dict=replace_condition_dict,
-        database="warehouse",
-        query_file_path=query_file_path,
-    )
-    if return_dict is True:
-        return data
-    else:
-        df = pd.DataFrame(data)
-        df.to_csv(file_name)
-        
 ##############################################################################

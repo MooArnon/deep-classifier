@@ -3,5 +3,6 @@ protobuf~=5.29.3
 tensorflow~=2.18.0
 pytest~=8.3.5
 pyarrow~=19.0.1
-pandas~=2.2.3
-git+https://github.com/MooArnon/space-time-pipeline.git@v0.4.4
+keras-tuner~=1.4.7
+scikit-learn~=1.6.1
+git+https://github.com/MooArnon/space-time-pipeline.git@v0.9.4

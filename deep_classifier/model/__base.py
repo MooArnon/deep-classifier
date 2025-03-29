@@ -146,7 +146,6 @@ class ModelWrapper:
 
         # 🔹 Apply Feature Engineering
         df_transformed = self.fe_pipeline.transform_df(df).drop_nulls()
-        df_transformed.to_pandas().to_csv("transformed.csv")
 
         if df_transformed.height == 0:
             raise ValueError("No valid records after feature engineering.")
@@ -268,10 +267,28 @@ class ModelWrapper:
         """
         pd_df = pd.DataFrame(data)
         df = pl.from_pandas(pd_df)
+        df = df.with_columns(
+            [
+                pl.col("quote_asset_volume").cast(pl.Float64),
+                pl.col("open").cast(pl.Float64),
+                pl.col("volume").cast(pl.Float64),
+                pl.col("taker_buy_base_asset_volume").cast(pl.Float64),
+                pl.col("close").cast(pl.Float64),
+                pl.col("low").cast(pl.Float64),
+                pl.col("open_time").cast(pl.Int64),
+                pl.col("close_time").cast(pl.Int64),
+                pl.col("taker_buy_quote_asset_volume").cast(pl.Float64),
+                pl.col("expiration_time").cast(pl.Int64),
+                pl.col("high").cast(pl.Float64),
+                pl.col("number_of_trades").cast(pl.Int64)
+            ]
+        )
         
+        # Sort by control column (timestamp) to ensure we get the latest row
+        df = df.sort(self.fe_pipeline.control_column)
+
         # Apply feature engineering
         df_transformed = self.fe_pipeline.transform_df(df)
-        print(df_transformed.columns)
         
         # Sort by control column (timestamp) to ensure we get the latest row
         # df_transformed = df_transformed.sort(self.fe_pipeline.control_column)

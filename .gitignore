@@ -179,3 +179,5 @@ fine_tune*/
 
 data-btc.csv
 transformed.csv
+
+set_env.sh

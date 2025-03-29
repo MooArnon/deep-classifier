@@ -53,7 +53,7 @@ def setup_args() -> argparse.ArgumentParser:
 ##############################################################################
 
 if __name__ == "__main__":
-    # python fine_tune_pipeline.py open_time open --epochs 150 --max_trials 50 --validation-split 0.2
+    # python fine_tune_pipeline.py --epochs 150 --max_trials 10 --validation-split 0.2
     args = setup_args()
     main(
         validation_split=args.validation_split,
