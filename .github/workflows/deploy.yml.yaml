@@ -1,31 +1,45 @@
-name: Deploy to AWS ECR
+name: Build, Test, and Deploy to AWS ECR
 
 on:
-  push:
-    branches:
-      - main
+  push:  # Runs on every push
   workflow_dispatch:  # Allows manual execution
 
 jobs:
-  deploy:
+  test-build:
     runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write  # Required for OIDC authentication
-      contents: read
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials (OIDC)
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker Image
+        run: |
+          docker build --no-cache -t test-python-image .
+
+      - name: Test Python Version Inside Container
+        run: |
+          docker run --rm --entrypoint python test-python-image --version
+
+  deploy:
+    needs: test-build  # Ensures testing passes before deployment
+    if: github.ref == 'refs/heads/main'  # Deploys only on main branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (IAM Keys)
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/<ROLE_NAME>
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-southeast-1
 
       - name: Log in to Amazon ECR
-        id: login-ecr
         run: |
           aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com
 
