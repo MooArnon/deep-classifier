@@ -19,6 +19,6 @@ jobs:
         run: |
           docker build --no-cache -t test-python-image .
 
-      - name: Test Docker Image
+      - name: Test Python Version Inside Container
         run: |
-          docker run --rm test-python-image python --version
+          docker run --rm --entrypoint python test-python-image --version
