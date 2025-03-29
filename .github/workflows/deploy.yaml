@@ -1,4 +1,4 @@
-name: Build, Test, and Deploy to AWS ECR
+name: Build, Test, and Deploy to AWS ECR (ARM64)
 
 on:
   push:
@@ -17,13 +17,14 @@ jobs:
       - name: Set Up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Build Docker Image
+      - name: Build Docker Image for Testing (ARM64)
         run: |
-          docker build --no-cache -t test-python-image .
+          docker buildx create --use
+          docker buildx build --platform linux/arm64 --no-cache -t test-python-image .
 
       - name: Test Python Version Inside Container
         run: |
-          docker run --rm --entrypoint python test-python-image --version
+          docker run --rm --platform linux/arm64 --entrypoint python test-python-image --version
 
   deploy:
     needs: test-build  # Ensures testing passes before deployment
@@ -44,6 +45,29 @@ jobs:
         run: |
           aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
 
+      - name: Get Latest Image Tag
+        id: get-latest-tag
+        run: |
+          latest_tag=$(aws ecr describe-images --repository-name space-time/deep-classifier \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text --region ap-southeast-1 2>/dev/null || echo "0")
+          
+          if [[ $latest_tag =~ ^[0-9]+$ ]]; then
+            new_tag=$(($latest_tag + 1))
+          else
+            new_tag=1
+          fi
+
+          echo "New Image Tag: $new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_ENV
+
+      - name: Build and Push Docker Image for ARM64
+        run: |
+          docker buildx create --use
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com/space-time/deep-classifier:$new_tag \
+            --push .
+
       - name: Make deploy.sh Executable
         run: chmod +x deploy.sh
 
@@ -52,3 +76,22 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           REGION: "ap-southeast-1"
+
+      - name: Deploy Image to Lambda
+        run: |
+          echo "Waiting for ECR image to be fully available..."
+          sleep 30
+
+          echo "Updating Lambda function to use the new image..."
+          aws lambda update-function-code \
+              --function-name predict--btc \
+              --image-uri ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com/space-time/deep-classifier:$new_tag \
+              --region ap-southeast-1
+
+          echo "Forcing redeployment of Lambda..."
+          aws lambda update-function-configuration \
+              --function-name predict--btc \
+              --environment "Variables={ASSET=btc,FORCE_UPDATE=$(date +%s)}" \
+              --region ap-southeast-1
+
+          echo "✅ Lambda function successfully updated!"
