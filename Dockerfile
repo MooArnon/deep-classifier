@@ -14,5 +14,3 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 COPY deep_classifier ${LAMBDA_TASK_ROOT}/deep_classifier
 COPY sql ${LAMBDA_TASK_ROOT}/sql
 COPY *.py ${LAMBDA_TASK_ROOT}
-
-CMD ["predict_lambda.handler"]
