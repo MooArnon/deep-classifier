@@ -1,7 +1,9 @@
 name: Build, Test, and Deploy to AWS ECR
 
 on:
-  push:  # Runs on every push
+  push:
+    branches:
+      - main  # Runs only when pushing to 'main' branch
   workflow_dispatch:  # Allows manual execution
 
 jobs:
@@ -25,7 +27,6 @@ jobs:
 
   deploy:
     needs: test-build  # Ensures testing passes before deployment
-    if: github.ref == 'refs/heads/main'  # Deploys only on main branch
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +42,7 @@ jobs:
 
       - name: Log in to Amazon ECR
         run: |
-          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com
+          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
 
       - name: Make deploy.sh Executable
         run: chmod +x deploy.sh
