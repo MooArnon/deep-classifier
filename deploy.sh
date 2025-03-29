@@ -18,7 +18,7 @@ else
 fi
 
 # Build the Docker image with the new tag
-sudo docker build -t $REPOSITORY_NAME:$new_tag .
+sudo docker build --platform linux/arm64 -t $REPOSITORY_NAME:$new_tag .
 
 # Tag the Docker image for ECR
 docker tag $REPOSITORY_NAME:$new_tag $AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPOSITORY_NAME:$new_tag
