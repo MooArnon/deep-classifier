@@ -169,3 +169,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+local/
+tmp/
+
+base_model/
+
+fine_tune*/
+
+data-btc.csv
+transformed.csv
+
+set_env.sh

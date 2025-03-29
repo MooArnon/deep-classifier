@@ -1,0 +1,24 @@
+name: Test Build and Run Docker Image
+
+on:
+  push:  # Runs on every push in any branch
+  workflow_dispatch:  # Allows manual execution
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker Image
+        run: |
+          docker build --no-cache -t test-python-image .
+
+      - name: Test Python Version Inside Container
+        run: |
+          docker run --rm --entrypoint python test-python-image --version
