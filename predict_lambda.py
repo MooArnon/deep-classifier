@@ -2,7 +2,7 @@
 # Import #
 ##############################################################################
 
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import traceback
 
@@ -46,7 +46,7 @@ def handler(event = None, context = None):
         
         logger.info(f"Predicted result: {pred} from {model_id}")
         
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         floored_time = floor_to_quarter(now)
         formatted_time = floored_time.strftime("%Y-%m-%d %H:%M:%S")
         formatted_time_id = floored_time.strftime("%Y%m%d_%H%M%S")
