@@ -31,6 +31,12 @@ def handler(event = None, context = None):
     logger = get_logger(logger_name=os.path.basename(__file__))
     dynamo = DynamoDB(logger)
     
+    model_type = os.environ['MODEL_TYPE']
+    if model_type == "base":
+        model_name="base"
+    elif model_type == "fine_tuned_model":
+        model_name="fine_tuned_model"
+        
     logger.info("Handler function started.")
     file_path = None
     
@@ -42,6 +48,7 @@ def handler(event = None, context = None):
         pred, model_id = predict(
             asset=asset, 
             logger=logger,
+            model_name=model_name,
         )
         
         logger.info(f"Predicted result: {pred} from {model_id}")
@@ -57,6 +64,7 @@ def handler(event = None, context = None):
             "predicted_time": formatted_time,
             "model_id": model_id,
             "position": position_mapper[pred],
+            "model_type": model_name,
             "updated_at": str(now),
         }
         dynamo.ingest_data('prediction_stream', pay_load, expire_day=7)

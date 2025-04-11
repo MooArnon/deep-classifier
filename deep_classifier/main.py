@@ -310,13 +310,17 @@ def run_fine_tune_pipeline(
 def predict(
         asset: str, 
         logger: logging.Logger, 
+        model_name: str,
         model_path: os.PathLike = "/tmp",
         aws_s3_bucket: str = "space-time-model",
         aws_s3_prefix: str = "classifier",
-        model_name: str = "fine_tuned_model",
 ) -> Union[int, str]:
-    aws_s3_prefix_tuned=f"{aws_s3_prefix}/tuned/{asset}"
-    model_name = f"{asset}_{model_name}"
+    if model_name == "fine_tuned_model":
+        aws_s3_prefix_tuned=f"{aws_s3_prefix}/tuned/{asset}"
+        model_name = f"{asset}_{model_name}"
+    elif model_name == "base":
+        aws_s3_prefix_tuned=f"{aws_s3_prefix}/base"
+        model_name = "model_base"
     
     s3 = S3DataLake(logger=logger)
     s3.download_file(
