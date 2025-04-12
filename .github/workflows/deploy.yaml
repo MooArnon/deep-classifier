@@ -19,6 +19,7 @@ jobs:
 
       - name: Build Docker Image for Testing (ARM64)
         run: |
+          aws s3 cp s3://space-time-model/classifier/tuned/btc/dnn/ . --recursive
           docker buildx create --use
           docker buildx build --platform linux/arm64 --no-cache -t test-python-image .
 
