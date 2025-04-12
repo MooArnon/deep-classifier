@@ -60,11 +60,11 @@ def handler(event = None, context = None):
             "updated_at": str(now),
         }
         dynamo.ingest_data('prediction_stream', pay_load, expire_day=7)
-        
         return {
             "statusCode": 200,
             "model_id": model_id,
             "position": position_mapper[pred],
+            "pay_load": pay_load,
             "body": "Prediction completed successfully."
         }
     except Exception as e:

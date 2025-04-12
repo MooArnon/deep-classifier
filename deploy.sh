@@ -17,6 +17,8 @@ else
   new_tag=1
 fi
 
+aws s3 cp s3://space-time-model/classifier/tuned/btc/dnn/ . --recursive
+
 # Build the Docker image with the new tag
 sudo docker build --platform linux/arm64 -t $REPOSITORY_NAME:$new_tag .
 

@@ -14,3 +14,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 COPY deep_classifier ${LAMBDA_TASK_ROOT}/deep_classifier
 COPY sql ${LAMBDA_TASK_ROOT}/sql
 COPY *.py ${LAMBDA_TASK_ROOT}
+
+COPY btc_fine_tuned_model_wrapper.pkl ${LAMBDA_TASK_ROOT}
+COPY btc_fine_tuned_model.h5 ${LAMBDA_TASK_ROOT}

@@ -310,21 +310,10 @@ def run_fine_tune_pipeline(
 def predict(
         asset: str, 
         logger: logging.Logger, 
-        model_path: os.PathLike = "/tmp",
-        aws_s3_bucket: str = "space-time-model",
-        aws_s3_prefix: str = "classifier",
+        model_path: os.PathLike = "",
         model_name: str = "fine_tuned_model",
 ) -> Union[int, str]:
-    aws_s3_prefix_tuned=f"{aws_s3_prefix}/tuned/{asset}"
     model_name = f"{asset}_{model_name}"
-    
-    s3 = S3DataLake(logger=logger)
-    s3.download_file(
-        bucket_name=aws_s3_bucket,
-        target_prefix=aws_s3_prefix_tuned,
-        logger=logger,
-        local_path=model_path,
-    )
 
     wrapper: ModelWrapper = ModelWrapper.load_tuned(
         path = model_path,
@@ -335,12 +324,10 @@ def predict(
     logger.info("Model architecture:")
     logger.info(f"{wrapper.model.summary()}")
     logger.info(f"Model id is: {wrapper.model_id}")
-
     
     dynamo = DynamoDB(logger)
     data = dynamo.print_all_records('price_stream')
     
-
     return wrapper.predict_one(data), wrapper.model_id
 
 ##############################################################################
