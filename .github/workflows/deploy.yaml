@@ -32,7 +32,7 @@ jobs:
 
       - name: Test Python Version Inside Container
         run: |
-          docker run --rm --platform linux/arm64 --entrypoint python test-python-image --version
+          docker run --rm --platform linux/arm64 test-python-image python --version
 
   deploy:
     needs: test-build  # Ensures testing passes before deployment
