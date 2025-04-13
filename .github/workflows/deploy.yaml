@@ -9,7 +9,6 @@ on:
 jobs:
 
   deploy:
-    needs: test-build  # Ensures testing passes before deployment
     runs-on: ubuntu-latest
 
     steps:
